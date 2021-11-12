@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: 'AWS::Serverless-2016-10-31'
+Description: photo album web application
+
+Resources:
+  photoalbumcc:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: "photoalbumcc"
+
+  picturesb2:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: "picturesb2" 
+
+  index-photos:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: index-photos
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      CodeUri: ./Lambda Functions/index_photos.py
+      Description: index photos and update in elastic search
+      MemorySize: 128
+      Timeout: 30
+      Role: 'arn:aws:iam::206476521689:role/service-role/index-photos-role-qfkgka72'
+      Environment:
+        Variables:
+          REGION: us-west-2
+
+  search-photos:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: search-photos
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      CodeUri: ./Lambda Functions/search_photos.py
+      Description: Search photos in Elastic Search
+      MemorySize: 128
+      Timeout: 30
+      Role: 'arn:aws:iam::206476521689:role/service-role/search-photos-role-z6vccxx0'
+      Events:
+        ImageBot:
+          Type: Api
+          Properties:
+            Path: /search-images
+            Method: post
+      Environment:
+        Variables:
+          REGION: us-west-2
+
+  upload-image:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      FunctionName: upload-image
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      CodeUri: ./Lambda Functions/upload_image.py
+      Description: Decode and upload pictures to s3
+      MemorySize: 128
+      Timeout: 30
+      Role: 'arn:aws:iam::206476521689:role/service-role/upload-image-role-o92aph0e'
+      Events:
+        ImageBot:
+          Type: Api
+          Properties:
+            Path: /upload-image
+            Method: post
+      Environment:
+        Variables:
+          REGION: us-west-2
+      
+  OpensearchDomain:
+    Type: 'AWS::Elasticsearch::Domain'
+    Properties:
+      DomainName: "photosindex"
+      ElasticsearchVersion: '7.10'
+      ElasticsearchClusterConfig:
+        DedicatedMasterEnabled: 'false'
+        InstanceCount: '2'
+        ZoneAwarenessEnabled: 'true'
+        InstanceType: "t3.small.elasticsearch"
+      EBSOptions:
+        EBSEnabled: true
+        Iops: 0
+        VolumeSize: 10
+        VolumeType: "gp2"
+      SnapshotOptions:
+        AutomatedSnapshotStartHour: '0'
+      AccessPolicies:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'es:*'
+            Resource: 'arn:aws:es:us-west-2:206476521689:domain/photosindex/*'
+      AdvancedOptions:
+        rest.action.multi.allow_explicit_index: "true"
